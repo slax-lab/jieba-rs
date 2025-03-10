@@ -36,6 +36,7 @@ lazy_static = { workspace = true }
 ordered-float = { workspace = true, optional = true }
 phf = { workspace = true }
 regex = { workspace = true }
+smallstr = { workspace = true }
 
 [features]
 default = ["default-dict"]
@@ -61,3 +62,4 @@ phf_codegen = "0.11"
 rand = "0.8"
 regex = "1.0"
 wasm-bindgen-test = "0.3.0"
+smallstr = "0.3"

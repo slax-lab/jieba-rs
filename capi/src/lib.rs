@@ -452,7 +452,7 @@ pub unsafe extern "C" fn jieba_add_word(cjieba: *mut CJieba, word: *const c_char
     let (jieba, c_str) = params_unwrap_mut(&cjieba, word, len);
     // FIXME: remove allocation
     let s = String::from_utf8_lossy(c_str.as_bytes_full());
-    jieba.add_word(&s, None, None)
+    jieba.add_word(&s, None, None) as usize
 }
 
 /// # Safety
@@ -463,7 +463,7 @@ pub unsafe extern "C" fn jieba_suggest_freq(cjieba: *mut CJieba, segment: *const
     // FIXME: remove allocation
     let s = String::from_utf8_lossy(c_str.as_bytes_full());
 
-    (*jieba).suggest_freq(&s)
+    (*jieba).suggest_freq(&s) as usize
 }
 
 #[cfg(test)]

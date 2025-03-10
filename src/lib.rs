@@ -73,6 +73,7 @@
 
 use include_flate::flate;
 use lazy_static::lazy_static;
+use smallstr::SmallString;
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -108,6 +109,8 @@ lazy_static! {
     static ref RE_HAN_CUT_ALL: Regex = Regex::new(r"([\u{3400}-\u{4DBF}\u{4E00}-\u{9FFF}\u{F900}-\u{FAFF}\u{20000}-\u{2A6DF}\u{2A700}-\u{2B73F}\u{2B740}-\u{2B81F}\u{2B820}-\u{2CEAF}\u{2CEB0}-\u{2EBEF}\u{2F800}-\u{2FA1F}]+)").unwrap();
     static ref RE_SKIP_CUT_ALL: Regex = Regex::new(r"[^a-zA-Z0-9+#\n]").unwrap();
 }
+
+type CompactString = SmallString<[u8; 2]>;
 
 struct SplitMatches<'r, 't> {
     finder: Matches<'r, 't>,
@@ -206,14 +209,17 @@ pub struct Tag<'a> {
 
 #[derive(Debug, Clone)]
 struct Record {
-    freq: usize,
-    tag: String,
+    freq: u32,
+    tag: CompactString,
 }
 
 impl Record {
     #[inline(always)]
-    fn new(freq: usize, tag: String) -> Self {
-        Self { freq, tag }
+    fn new(freq: u32, tag: impl AsRef<str>) -> Self {
+        Self {
+            freq,
+            tag: CompactString::from(tag.as_ref()),
+        }
     }
 }
 
@@ -319,7 +325,7 @@ impl Jieba {
     /// `freq`: if `None`, will be given by [suggest_freq](#method.suggest_freq)
     ///
     /// `tag`: if `None`, will be given `""`
-    pub fn add_word(&mut self, word: &str, freq: Option<usize>, tag: Option<&str>) -> usize {
+    pub fn add_word(&mut self, word: &str, freq: Option<u32>, tag: Option<&str>) -> u32 {
         if word.is_empty() {
             return 0;
         }
@@ -331,15 +337,15 @@ impl Jieba {
                 let old_freq = self.records[word_id as usize].freq;
                 self.records[word_id as usize].freq = freq;
 
-                self.total += freq;
-                self.total -= old_freq;
+                self.total += freq as usize;
+                self.total -= old_freq as usize;
             }
             None => {
                 let word_id = self.records.len() as i32;
                 self.records.push(Record::new(freq, String::from(tag)));
 
                 self.cedar.update(word, word_id);
-                self.total += freq;
+                self.total += freq as usize;
             }
         };
 
@@ -407,11 +413,11 @@ impl Jieba {
 
                     match self.cedar.exact_match_search(word) {
                         Some((word_id, _, _)) => {
-                            self.records[word_id as usize].freq = freq;
+                            self.records[word_id as usize].freq = freq as u32;
                         }
                         None => {
                             let word_id = self.records.len() as i32;
-                            self.records.push(Record::new(freq, String::from(tag)));
+                            self.records.push(Record::new(freq as u32, String::from(tag)));
                             self.cedar.update(word, word_id);
                         }
                     };
@@ -419,12 +425,13 @@ impl Jieba {
             }
             buf.clear();
         }
-        self.total = self.records.iter().map(|n| n.freq).sum();
+
+        self.total = self.records.iter().map(|n| n.freq as usize).sum();
 
         Ok(())
     }
 
-    fn get_word_freq(&self, word: &str, default: usize) -> usize {
+    fn get_word_freq(&self, word: &str, default: u32) -> u32 {
         match self.cedar.exact_match_search(word) {
             Some((word_id, _, _)) => self.records[word_id as usize].freq,
             _ => default,
@@ -432,12 +439,12 @@ impl Jieba {
     }
 
     /// Suggest word frequency to force the characters in a word to be joined or split.
-    pub fn suggest_freq(&self, segment: &str) -> usize {
+    pub fn suggest_freq(&self, segment: &str) -> u32 {
         let logtotal = (self.total as f64).ln();
         let logfreq = self.cut(segment, false).iter().fold(0f64, |freq, word| {
             freq + (self.get_word_freq(word, 1) as f64).ln() - logtotal
         });
-        std::cmp::max((logfreq + logtotal).exp() as usize + 1, self.get_word_freq(segment, 1))
+        std::cmp::max((logfreq + logtotal).exp() as u32 + 1, self.get_word_freq(segment, 1))
     }
 
     #[allow(clippy::ptr_arg)]
